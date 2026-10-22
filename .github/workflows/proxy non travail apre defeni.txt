@@ -1,0 +1,10 @@
+45.38.107.97:6014:pckmfqpv:xmct620pmakf
+64.137.96.74:6641:pckmfqpv:xmct620pmakf
+198.23.243.226:6361:pckmfqpv:xmct620pmakf
+38.154.185.97:6370:pckmfqpv:xmct620pmakf
+84.247.60.125:6095:pckmfqpv:xmct620pmakf
+191.96.254.138:6185:pckmfqpv:xmct620pmakf
+198.46.161.42:5092:pckmfqpv:xmct620pmakf
+64.137.10.153:5803:pckmfqpv:xmct620pmakf
+104.164.49.38:7693:pckmfqpv:xmct620pmakf
+23.26.71.145:5628:pckmfqpv:xmct620pmakf

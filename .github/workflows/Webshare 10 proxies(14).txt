@@ -1,0 +1,10 @@
+45.38.107.97:6014:cnpykfrm:7q4eolqcmjcr
+64.137.96.74:6641:cnpykfrm:7q4eolqcmjcr
+198.23.243.226:6361:cnpykfrm:7q4eolqcmjcr
+38.154.185.97:6370:cnpykfrm:7q4eolqcmjcr
+84.247.60.125:6095:cnpykfrm:7q4eolqcmjcr
+191.96.254.138:6185:cnpykfrm:7q4eolqcmjcr
+198.46.161.42:5092:cnpykfrm:7q4eolqcmjcr
+64.137.10.153:5803:cnpykfrm:7q4eolqcmjcr
+104.164.49.38:7693:cnpykfrm:7q4eolqcmjcr
+23.26.71.145:5628:cnpykfrm:7q4eolqcmjcr

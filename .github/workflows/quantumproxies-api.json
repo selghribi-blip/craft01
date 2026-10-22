@@ -1,0 +1,414 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Quantum Proxies Public API",
+    "description": "Generate and manage proxies via API key (Authorization: Bearer YOUR_API_KEY).\n\n**Targeting data**: Residential Premium and Mobile use a single targeting-options endpoint returning the full country/region/city/ISP tree. Residential Basic and Datacenter (traffic-based) use the geo endpoints (countries, states, cities, ASNs) with the matching planType. Datacenter (static gateways) uses its own targeting-options endpoint (US, CA, DE, GB, NL). IPv6 uses a fixed country list (mix, us, gb, de, fr, ca, nl, ru, jp, it, es, ro, at, cn, au, pl, in, sg, br).\n\n**IP authentication**: whitelist IPs via POST /api/v1/public/proxies/whitelist-ip (Residential Basic, Datacenter, ISP, IPv6, Mobile). Residential Premium/Private use username:password auth only.",
+    "version": "1.1.0"
+  },
+  "servers": [
+    { "url": "https://app.quantumproxies.io", "description": "Production" }
+  ],
+  "security": [{ "bearerAuth": [] }],
+  "tags": [
+    { "name": "Account" },
+    { "name": "Proxies" },
+    { "name": "Targeting" }
+  ],
+  "paths": {
+    "/api/v1/public/balance": {
+      "get": {
+        "summary": "Get account balance",
+        "operationId": "getBalance",
+        "tags": ["Account"],
+        "responses": {
+          "200": {
+            "description": "Balance and total spending",
+            "content": {
+              "application/json": {
+                "example": {
+                  "type": "response",
+                  "message": "success",
+                  "payload": { "balance": 100.5, "balanceUSD": 100.5, "totalSpent": 500.25, "totalSpentUSD": 500.25 }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/plans": {
+      "get": {
+        "summary": "List available proxy plans",
+        "operationId": "listPlans",
+        "tags": ["Account"],
+        "responses": { "200": { "description": "Available plans with prices and plan IDs" } }
+      }
+    },
+    "/api/v1/public/purchase": {
+      "post": {
+        "summary": "Purchase a plan using account balance",
+        "operationId": "purchasePlan",
+        "tags": ["Account"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["planId"],
+                "properties": { "planId": { "type": "string", "description": "Plan ID from GET /api/v1/public/plans" } }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Order created; use the returned orderId to generate proxies" } }
+      }
+    },
+    "/api/v1/public/orders": {
+      "get": {
+        "summary": "List your orders",
+        "operationId": "listOrders",
+        "tags": ["Account"],
+        "responses": { "200": { "description": "Orders with status, plan info and orderId values" } }
+      }
+    },
+    "/api/v1/public/proxies": {
+      "get": {
+        "summary": "List your active proxies",
+        "operationId": "listProxies",
+        "tags": ["Proxies"],
+        "responses": { "200": { "description": "Active proxies with type, expiry, bandwidth and whitelist_ip" } }
+      }
+    },
+    "/api/v1/public/proxies/generate": {
+      "post": {
+        "summary": "Generate proxy strings for an order",
+        "description": "Works for every plan type. Common: orderId, protocol, format, quantity. Geo (Residential Basic / Datacenter traffic): country, state, city, asn, strict. Residential Premium: country, state (region slug), city (city slug), isp (ISP code), filter. Mobile: country, region, city, isp, filter, gateway, sessionTime; or pass a whitelisted ip for the IP-auth list. IPv6: country (or MIX), rotation rotating|sticky|static. Sticky sessions: rotation=sticky + sessionTime minutes (1-1440; Residential/Datacenter Basic minimum 3).",
+        "operationId": "generateProxies",
+        "tags": ["Proxies"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["orderId"],
+                "properties": {
+                  "orderId": { "type": "string", "description": "Your order ID" },
+                  "protocol": { "type": "string", "enum": ["http", "socks5"], "default": "http" },
+                  "format": {
+                    "type": "string",
+                    "enum": ["user:pass@host:port", "host:port:user:pass", "http://user:pass@host:port", "socks5://user:pass@host:port"],
+                    "default": "user:pass@host:port"
+                  },
+                  "quantity": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 10 },
+                  "country": { "type": "string", "description": "Country code (e.g. us). IPv6: MIX for worldwide pool." },
+                  "state": { "type": "string", "description": "State/region. Residential Premium & Mobile: region slug from targeting options. Alias: region." },
+                  "region": { "type": "string", "description": "Alias of state (Residential Premium / Mobile naming)." },
+                  "city": { "type": "string", "description": "City. Residential Premium & Mobile: city slug from targeting options." },
+                  "isp": { "type": "string", "description": "ISP code (Residential Premium / Mobile: isps[].code from targeting options; legacy Mobile: ASN e.g. AS7922)." },
+                  "asn": { "type": "string", "description": "ASN targeting (Residential Basic / Datacenter traffic-based), e.g. AS12345." },
+                  "strict": { "type": "boolean", "default": false, "description": "Residential/Datacenter Basic: true = allow same-country fallback when the exact target is unavailable." },
+                  "filter": { "type": "string", "enum": ["speed", "speed-quality", "quality"], "description": "Pool filter (Residential Premium / Mobile rotating). Omit for max pool size." },
+                  "rotation": { "type": "string", "enum": ["rotating", "sticky", "static"], "default": "rotating", "description": "static is IPv6 only (fixed session, no TTL)." },
+                  "sessionTime": { "type": "integer", "minimum": 1, "maximum": 1440, "default": 10, "description": "Sticky session duration in minutes (Residential/Datacenter Basic minimum 3)." },
+                  "gateway": { "type": "string", "enum": ["ww", "us", "eu", "as"], "default": "ww", "description": "Mobile gateway region." },
+                  "ip": { "type": "string", "description": "Mobile only: a whitelisted IP — returns the IP-auth proxy list for that IP instead of user:pass strings." }
+                }
+              },
+              "examples": {
+                "residentialPremium": {
+                  "summary": "Residential Premium with full targeting",
+                  "value": { "orderId": "your_order_id", "country": "al", "state": "durres", "city": "durres", "isp": "abissnet_sh.a.", "rotation": "sticky", "sessionTime": 30, "filter": "quality", "quantity": 10, "format": "user:pass@host:port" }
+                },
+                "residentialBasic": {
+                  "summary": "Residential Basic with ASN + fallback",
+                  "value": { "orderId": "your_order_id", "country": "us", "asn": "AS7922", "strict": true, "rotation": "sticky", "sessionTime": 240, "quantity": 10 }
+                },
+                "mobileUserPass": {
+                  "summary": "Mobile user:pass generation",
+                  "value": { "orderId": "your_order_id", "country": "us", "region": "california", "city": "losangeles", "isp": "tmobile", "rotation": "sticky", "sessionTime": 30, "gateway": "ww", "quantity": 10 }
+                },
+                "mobileIpAuth": {
+                  "summary": "Mobile IP-auth list for a whitelisted IP",
+                  "value": { "orderId": "your_order_id", "ip": "203.0.113.7", "gateway": "eu", "protocol": "http" }
+                },
+                "ipv6Static": {
+                  "summary": "IPv6 static sessions (no TTL)",
+                  "value": { "orderId": "your_order_id", "country": "de", "rotation": "static", "quantity": 5 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Generated proxies",
+            "content": {
+              "application/json": {
+                "example": {
+                  "type": "response",
+                  "message": "success",
+                  "payload": {
+                    "orderId": "your_order_id",
+                    "quantity": 10,
+                    "protocol": "http",
+                    "format": "user:pass@host:port",
+                    "rotation": "sticky",
+                    "sessionTime": 30,
+                    "geoTargeting": { "country": "us", "state": null, "city": null },
+                    "proxies": ["user-country-us:pass@gateway.quantumproxies.io:8080"],
+                    "bandwidth": 5,
+                    "bandwidthLeft": 4.2,
+                    "whitelist": []
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid parameters or expired plan" },
+          "404": { "description": "Order or proxy not found" }
+        }
+      }
+    },
+    "/api/v1/public/proxies/whitelist-ip": {
+      "post": {
+        "summary": "Whitelist an IP for IP authentication (or update a Mobile entry)",
+        "description": "Whitelist an IP so it can use the proxy without credentials. Supported: Residential Basic, Datacenter (both types), ISP, IPv6, Mobile. Residential Premium/Private use username:password auth — no whitelist needed. Mobile supports extra options for the allocated ports and action=update to edit an existing entry.",
+        "operationId": "whitelistIp",
+        "tags": ["Proxies"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["orderId", "ip"],
+                "properties": {
+                  "orderId": { "type": "string" },
+                  "ip": { "type": "string", "description": "IPv4 address to whitelist" },
+                  "action": { "type": "string", "enum": ["add", "update"], "default": "add", "description": "Mobile only: update = edit an existing entry's settings" },
+                  "ports_count": { "type": "integer", "minimum": 1, "maximum": 1000, "description": "Mobile only: ports to allocate" },
+                  "protocol": { "type": "string", "enum": ["HTTP", "SOCKS5"], "description": "Mobile only" },
+                  "country": { "type": "string", "description": "Mobile only: geo for the allocated ports" },
+                  "region": { "type": "string", "description": "Mobile only" },
+                  "city": { "type": "string", "description": "Mobile only" },
+                  "isp": { "type": "string", "description": "Mobile only" },
+                  "sticky": { "type": "boolean", "description": "Mobile only: keep the same IP per port" },
+                  "ttl": { "type": "integer", "description": "Mobile only: sticky TTL in seconds" }
+                }
+              },
+              "example": { "orderId": "your_order_id", "ip": "203.0.113.7" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated whitelist",
+            "content": {
+              "application/json": {
+                "example": {
+                  "type": "response",
+                  "message": "IP whitelisted successfully",
+                  "payload": { "ip": "203.0.113.7", "whitelisted": true, "whitelist_ip": ["203.0.113.7"] }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List whitelisted IPs for an order",
+        "description": "Returns payload.whitelist_ip for every plan. Mobile and Residential Basic also return payload.entries with the detailed upstream entries (ports, geo targeting, sticky).",
+        "operationId": "listWhitelistIps",
+        "tags": ["Proxies"],
+        "parameters": [
+          { "name": "orderId", "in": "query", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whitelist for the order",
+            "content": {
+              "application/json": {
+                "example": {
+                  "type": "response",
+                  "message": "success",
+                  "payload": { "orderId": "your_order_id", "whitelist_ip": ["203.0.113.7"], "entries": [{ "ip": "203.0.113.7", "ports": [{ "port": 10000 }], "country": "us", "sticky": false }] }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove an IP from the whitelist",
+        "operationId": "removeWhitelistIp",
+        "tags": ["Proxies"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["orderId", "ip"],
+                "properties": {
+                  "orderId": { "type": "string" },
+                  "ip": { "type": "string", "description": "IPv4 address to remove" },
+                  "id": { "type": "string", "description": "Mobile only: whitelist entry id (optional)" }
+                }
+              },
+              "example": { "orderId": "your_order_id", "ip": "203.0.113.7" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated whitelist",
+            "content": {
+              "application/json": {
+                "example": {
+                  "type": "response",
+                  "message": "IP removed from whitelist",
+                  "payload": { "ip": "203.0.113.7", "removed": true, "whitelist_ip": [] }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/generator/residential-premium/targeting-options": {
+      "get": {
+        "summary": "Residential Premium: full location tree (one request)",
+        "description": "Returns countries, regions (states), cities and ISPs in one request. Use payload.data object keys as country/state/city values and isps[].code as the isp parameter for POST /api/v1/public/proxies/generate.",
+        "operationId": "getResidentialPremiumTargetingOptions",
+        "tags": ["Targeting"],
+        "responses": {
+          "200": {
+            "description": "Location tree",
+            "content": {
+              "application/json": {
+                "example": {
+                  "type": "response",
+                  "message": "Location data retrieved successfully",
+                  "payload": {
+                    "success": true,
+                    "data": { "al": { "country_name": "Albania", "regions": { "durres": { "region_name": "Durres", "cities": { "durres": { "city_name": "Durres", "isps": [{ "code": "abissnet_sh.a.", "name": "Abissnet Sh.A." }] } } } } } },
+                    "countries": [{ "code": "al", "name": "Albania" }]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/generator/mobile/targeting-options": {
+      "get": {
+        "summary": "Mobile: full location tree (one request)",
+        "description": "Returns countries, regions, cities and ISPs for Mobile proxies in one request. Use payload.data object keys as country/region/city values and isps[].code as the isp parameter for POST /api/v1/public/proxies/generate (and for the Mobile whitelist-ip options).",
+        "operationId": "getMobileTargetingOptions",
+        "tags": ["Targeting"],
+        "responses": {
+          "200": {
+            "description": "Location tree",
+            "content": {
+              "application/json": {
+                "example": {
+                  "type": "response",
+                  "message": "Mobile targeting options retrieved successfully",
+                  "payload": {
+                    "success": true,
+                    "data": { "us": { "regions": { "california": { "region_name": "California", "cities": { "losangeles": { "city_name": "Los Angeles", "isps": [{ "code": "tmobile", "name": "T-Mobile" }] } } } } } },
+                    "countries": [{ "code": "us", "name": "United States" }]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/generator/datacenter/targeting-options": {
+      "get": {
+        "summary": "Datacenter (static gateways): available locations",
+        "description": "One request returns the static gateway locations (US, CA, DE, GB, NL) with host, portHttp (9999) and portSocks5 (10000). Use with the credentials returned by POST generate. Whitelist IPs via /api/v1/public/proxies/whitelist-ip for traffic to work.",
+        "operationId": "getDatacenterTargetingOptions",
+        "tags": ["Targeting"],
+        "responses": {
+          "200": {
+            "description": "Locations list",
+            "content": {
+              "application/json": {
+                "example": {
+                  "type": "response",
+                  "payload": {
+                    "success": true,
+                    "locations": [
+                      { "code": "us", "name": "United States", "host": "datacenter-us.quantumproxies.io", "portHttp": 9999, "portSocks5": 10000 },
+                      { "code": "ca", "name": "Canada", "host": "datacenter-ca.quantumproxies.io", "portHttp": 9999, "portSocks5": 10000 }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/geo/countries": {
+      "get": {
+        "summary": "Available countries (Residential Basic / Datacenter traffic / legacy Mobile)",
+        "operationId": "getGeoCountries",
+        "tags": ["Targeting"],
+        "parameters": [
+          { "name": "planType", "in": "query", "required": true, "schema": { "type": "string", "enum": ["residentialbasic", "datacentertraffic", "mobile"] } }
+        ],
+        "responses": { "200": { "description": "Countries list" } }
+      }
+    },
+    "/api/v1/public/geo/states": {
+      "get": {
+        "summary": "Available states/regions for a country",
+        "operationId": "getGeoStates",
+        "tags": ["Targeting"],
+        "parameters": [
+          { "name": "planType", "in": "query", "required": true, "schema": { "type": "string", "enum": ["residentialbasic", "datacentertraffic"] } },
+          { "name": "country", "in": "query", "required": true, "schema": { "type": "string" }, "example": "US" }
+        ],
+        "responses": { "200": { "description": "States list" } }
+      }
+    },
+    "/api/v1/public/geo/cities": {
+      "get": {
+        "summary": "Available cities for a country/state",
+        "operationId": "getGeoCities",
+        "tags": ["Targeting"],
+        "parameters": [
+          { "name": "planType", "in": "query", "required": true, "schema": { "type": "string", "enum": ["residentialbasic", "datacentertraffic"] } },
+          { "name": "country", "in": "query", "required": true, "schema": { "type": "string" }, "example": "US" },
+          { "name": "state", "in": "query", "required": false, "schema": { "type": "string" }, "example": "California" }
+        ],
+        "responses": { "200": { "description": "Cities list" } }
+      }
+    },
+    "/api/v1/public/geo/asns": {
+      "get": {
+        "summary": "Available ASNs for targeting",
+        "description": "ASN targeting for Residential Basic and Datacenter (traffic-based). Pass the returned ASN in the asn parameter of POST generate.",
+        "operationId": "getGeoAsns",
+        "tags": ["Targeting"],
+        "parameters": [
+          { "name": "planType", "in": "query", "required": true, "schema": { "type": "string", "enum": ["residentialbasic", "datacentertraffic"] } },
+          { "name": "country", "in": "query", "required": false, "schema": { "type": "string" }, "example": "US" }
+        ],
+        "responses": { "200": { "description": "ASNs list" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "description": "API key from the dashboard API Hub" }
+    }
+  }
+}
